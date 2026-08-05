@@ -1,0 +1,33 @@
+loopcore -- start here
+======================
+
+Fresh machine, nothing installed:
+
+    1.  Right-click setup.bat  ->  Run as administrator
+        Installs Git, Visual Studio C++ build tools, and CUDA.
+        Walks you through TensorRT, which NVIDIA requires you to
+        download by hand.
+        Expect 20-40 minutes and one reboot.
+
+    2.  build.bat
+        Compiles to build\loopcore.exe
+
+    3.  Export your model, on this machine:
+
+            yolo export model=best.pt format=engine half=True nms=True ^
+                        imgsz=[384,640] device=0
+
+        Put the .engine next to loopcore.exe, or type the full path
+        into the Loop tab.
+
+    4.  build\loopcore.exe
+
+
+Already have Visual Studio, CUDA, and TensorRT?
+Skip step 1 and run build.bat.
+
+
+Keep this folder together. build.bat expects src\ and setup.bat beside
+it, and creates build\ and third_party\ itself.
+
+Full notes, architecture, and known limits: README.md
