@@ -39,7 +39,7 @@ build.bat      compiles                     (no admin)
 
 `setup.bat` installs, via winget: Git, Visual Studio 2022 Build Tools with
 the C++ toolset and Windows SDK, the CUDA Toolkit, and optionally Python
-plus ultralytics for exporting engines. Budget 20–40 minutes and one reboot.
+plus ultralytics for exporting engines (recommended). Budget 20–40 minutes and one reboot.
 
 **TensorRT is the one manual step.** NVIDIA gates it behind a free developer
 account and a click-through EULA, so no script can fetch it unattended. The
