@@ -15,7 +15,7 @@ Fresh machine, nothing installed:
     3.  Export your model, on this machine:
 
             yolo export model=best.pt format=engine half=True nms=True ^
-                        imgsz=[384,640] device=0
+                        imgsz=[640,640] device=0
 
         Put the .engine next to loopcore.exe, or type the full path
         into the Loop tab.

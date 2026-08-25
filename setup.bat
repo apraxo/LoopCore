@@ -129,6 +129,9 @@ if "!HAVE_CUDA!"=="0" (
     echo.
     echo  [.] Installing the CUDA Toolkit. About 3 GB.
     echo.
+    echo      Whichever major version installs, note it. The TensorRT zip
+    echo      you download later must match: cuda-12.x or cuda-13.x.
+    echo.
     winget install --id Nvidia.CUDA -e --source winget ^
         --accept-package-agreements --accept-source-agreements
     if errorlevel 1 (
@@ -145,6 +148,7 @@ if "!HAVE_CUDA!"=="0" (
 )
 
 rem ---------------------------------------------------------------- tensorrt
+call :detect_cuda_major
 call :setup_tensorrt
 if errorlevel 1 exit /b 1
 
@@ -169,6 +173,32 @@ if !errorlevel! EQU 1 (
     )
 )
 
+rem --------------------------------------------- arduino-cli (optional)
+echo.
+choice /C YN /M "Install arduino-cli, so loopcore can flash an Arduino for you"
+if !errorlevel! EQU 1 (
+    where arduino-cli >nul 2>&1
+    if errorlevel 1 (
+        echo  [.] Installing arduino-cli...
+        winget install --id ArduinoSA.CLI -e --source winget ^
+            --accept-package-agreements --accept-source-agreements
+        if errorlevel 1 (
+            echo.
+            echo  [!] winget could not install it. Download the Windows zip from
+            echo      https://arduino.github.io/arduino-cli/latest/installation/
+            echo      and put arduino-cli.exe in loopcore\build\bin\tools
+            echo      Flashing from inside loopcore needs it; nothing else does.
+        ) else (
+            set "NEEDS_REBOOT=1"
+        )
+    ) else (
+        echo  [+] arduino-cli already installed.
+    )
+)
+
+rem ------------------------------------------------- version sanity checks
+call :check_versions
+
 rem ----------------------------------------------------------------- wrap up
 echo.
 echo  ===============================================================
@@ -186,6 +216,84 @@ if "!NEEDS_REBOOT!"=="1" (
 )
 echo.
 pause
+exit /b 0
+
+
+rem ===========================================================================
+:detect_cuda_major
+rem ===========================================================================
+set "CUDAMAJ="
+for /f "tokens=*" %%v in ('nvcc --version 2^>nul ^| findstr /C:"release"') do set "NVCCLINE=%%v"
+if defined NVCCLINE (
+    for /f "tokens=2 delims=V." %%a in ("!NVCCLINE!") do set "CUDAMAJ=%%a"
+)
+if not defined CUDAMAJ (
+    for /d %%d in ("%ProgramFiles%\NVIDIA GPU Computing Toolkit\CUDA\v*") do (
+        set "CV=%%~nxd"
+        set "CV=!CV:v=!"
+        for /f "tokens=1 delims=." %%a in ("!CV!") do set "CUDAMAJ=%%a"
+    )
+)
+if not defined CUDAMAJ set "CUDAMAJ=12"
+exit /b 0
+
+
+rem ===========================================================================
+:check_versions
+rem  Two mismatches cost hours if they are found at link time instead of now.
+rem ===========================================================================
+echo.
+echo  [.] Checking version compatibility...
+
+set "CUDAMAJ="
+for /f "tokens=*" %%v in ('nvcc --version 2^>nul ^| findstr /C:"release"') do set "NVCCLINE=%%v"
+if defined NVCCLINE (
+    for /f "tokens=2 delims=V." %%a in ("!NVCCLINE!") do set "CUDAMAJ=%%a"
+)
+if not defined CUDAMAJ (
+    for /d %%d in ("%ProgramFiles%\NVIDIA GPU Computing Toolkit\CUDA\v*") do (
+        set "CV=%%~nxd"
+        set "CV=!CV:v=!"
+        for /f "tokens=1 delims=." %%a in ("!CV!") do set "CUDAMAJ=%%a"
+    )
+)
+
+set "TRTMAJ="
+if not "%TENSORRT_DIR%"=="" (
+    for %%d in ("%TENSORRT_DIR%") do set "TRTNAME=%%~nxd"
+    for /f "tokens=2 delims=-." %%a in ("!TRTNAME!") do set "TRTMAJ=%%a"
+)
+
+if defined CUDAMAJ echo      CUDA major version    !CUDAMAJ!
+if defined TRTMAJ  echo      TensorRT major version !TRTMAJ!
+
+if "!TRTMAJ!"=="11" (
+    echo.
+    echo  [!] TensorRT 11.x detected.
+    echo.
+    echo      loopcore targets the 10.x API. TensorRT 11 removed
+    echo      BuilderFlag::kFP16, BuilderFlag::kINT8, IInt8Calibrator, and
+    echo      the IPluginV2 family. That breaks both this build and the
+    echo      ultralytics export flags half=True and int8=True.
+    echo.
+    echo      Download TensorRT 10.16.x instead and point TENSORRT_DIR at it.
+    echo.
+    pause
+)
+
+if "!CUDAMAJ!"=="13" (
+    echo.
+    echo  [i] CUDA 13 detected. That is fine -- TensorRT 10.16 has a CUDA 13
+    echo      build. Make sure you downloaded the zip whose name ends in
+    echo      cuda-13.x, not cuda-12.9. Mixing the two fails at link time.
+    echo.
+)
+if "!CUDAMAJ!"=="12" (
+    echo.
+    echo  [i] CUDA 12 detected. Download the TensorRT zip whose name ends in
+    echo      cuda-12.x, not cuda-13.x.
+    echo.
+)
 exit /b 0
 
 
@@ -216,9 +324,19 @@ echo.
 echo    On the page that opens:
 echo      1. Sign in or create a free NVIDIA developer account
 echo      2. Accept the terms
-echo      3. Pick TensorRT 10.x
-echo      4. Download the "TensorRT 10.x for Windows" ZIP
-echo         ^(match your CUDA version: 12.x for a current toolkit^)
+echo      3. Under "TensorRT 10", pick the newest 10.x release
+echo         ^(10.16 or later^). Do NOT take 11.x: it removed the
+echo         APIs this build and the ultralytics exporter both use.
+echo      4. Expand "Windows" and take the ZIP whose name ends in
+echo         cuda-!CUDAMAJ!.x -- it must match the CUDA toolkit here.
+echo.
+echo         You want a file named like:
+echo             TensorRT-10.16.1.11.Windows.amd64.cuda-!CUDAMAJ!.2.zip
+echo             ^<version^>       ^<platform^>    ^<must be cuda-!CUDAMAJ!.x^>
+echo.
+echo         NOT the .tar.gz ^(that is Linux^) and NOT "pip install
+echo         tensorrt" ^(Python bindings only, no C++ headers^).
+echo         The ZIP is the only download with include\ and lib\.
 echo  ---------------------------------------------------------------
 echo.
 choice /C YN /M "Open the TensorRT download page now"
